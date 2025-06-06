@@ -1,4 +1,4 @@
-name: Build Kivy APK
+name: Build APK
 
 on:
   push:
@@ -10,43 +10,65 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: 3.11
+          python-version: '3.10'
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            autoconf automake libtool pkg-config libffi-dev \
-            build-essential libssl-dev zlib1g-dev libbz2-dev \
-            libreadline-dev libsqlite3-dev llvm ncurses-dev \
-            libncurses5-dev libgdbm-dev libdb-dev libexpat1-dev \
-            liblzma-dev libxml2-dev libxmlsec1-dev wget unzip
+            build-essential \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            libffi-dev \
+            libssl-dev \
+            zlib1g-dev \
+            libbz2-dev \
+            libreadline-dev \
+            libsqlite3-dev \
+            llvm \
+            libncurses5-dev \
+            libncursesw5-dev \
+            xz-utils \
+            tk-dev \
+            libxml2-dev \
+            libxmlsec1-dev \
+            unzip \
+            openjdk-17-jdk \
+            wget
 
-      - name: Install Buildozer & p4a
+      - name: Install pip packages
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install Cython==0.29.36
-          pip install buildozer python-for-android
+          pip install buildozer
 
       - name: Install Android SDK
         run: |
-          curl -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-          unzip cmdline-tools.zip -d $HOME/android-sdk/cmdline-tools
-          yes | $HOME/android-sdk/cmdline-tools/tools/bin/sdkmanager --sdk_root=$HOME/android-sdk --licenses
-          $HOME/android-sdk/cmdline-tools/tools/bin/sdkmanager --sdk_root=$HOME/android-sdk "platform-tools" "platforms;android-33" "build-tools;33.0.2"
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          cd $HOME/android-sdk/cmdline-tools
+          curl -o sdk-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip sdk-tools.zip
+          mv cmdline-tools latest
+          yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk --licenses
+          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk "platform-tools" "platforms;android-31" "build-tools;31.0.0"
 
-      - name: Build APK using Buildozer
+      - name: Build APK with Buildozer
         env:
           ANDROID_SDK_ROOT: ${{ runner.home }}/android-sdk
-          PATH: ${{ runner.home }}/android-sdk/cmdline-tools/tools/bin:$PATH
+          PATH: ${{ runner.home }}/android-sdk/cmdline-tools/latest/bin:${{ runner.home }}/android-sdk/platform-tools:$PATH
         run: |
           buildozer android debug
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
         with:
-          name: spyapp-apk
+          name: my-app-apk
           path: bin/*.apk
