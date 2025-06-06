@@ -10,6 +10,8 @@ orientation = portrait
 fullscreen = 1
 android.build_tools = 33.0.2
 android.api = 33
+android.accept_sdk_license = True
+android.skip_update = False
 [buildozer]
 log_level = 2
 warn_on_root = 0
