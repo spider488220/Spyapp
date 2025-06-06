@@ -1,4 +1,4 @@
-name: Build APK
+name: Build Kivy APK
 
 on:
   push:
@@ -10,40 +10,43 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
-          python-version: 3.11
+          python-version: 3.10
 
       - name: Install system dependencies
         run: |
-          sudo apt update
-          sudo apt install -y \
-            autoconf automake libtool pkg-config \
-            libffi-dev build-essential zip unzip \
-            openjdk-17-jdk python3-pip git wget
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf automake libtool pkg-config libffi-dev \
+            build-essential libssl-dev zlib1g-dev libbz2-dev \
+            libreadline-dev libsqlite3-dev llvm ncurses-dev \
+            libncurses5-dev libgdbm-dev libdb-dev libexpat1-dev \
+            liblzma-dev libxml2-dev libxmlsec1-dev wget unzip
 
-      - name: Install Buildozer and dependencies
+      - name: Install Buildozer & p4a
         run: |
           pip install --upgrade pip
           pip install Cython==0.29.36
-          pip install buildozer
+          pip install buildozer python-for-android
 
-      - name: Initialize buildozer.spec (if missing)
+      - name: Install Android SDK
         run: |
-          if [ ! -f buildozer.spec ]; then
-            buildozer init
-          fi
+          curl -o cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+          unzip cmdline-tools.zip -d $HOME/android-sdk/cmdline-tools
+          yes | $HOME/android-sdk/cmdline-tools/tools/bin/sdkmanager --sdk_root=$HOME/android-sdk --licenses
+          $HOME/android-sdk/cmdline-tools/tools/bin/sdkmanager --sdk_root=$HOME/android-sdk "platform-tools" "platforms;android-33" "build-tools;33.0.2"
 
-      - name: Build APK
+      - name: Build APK using Buildozer
+        env:
+          ANDROID_SDK_ROOT: ${{ runner.home }}/android-sdk
+          PATH: ${{ runner.home }}/android-sdk/cmdline-tools/tools/bin:$PATH
         run: |
           buildozer android debug
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v3
         with:
           name: spyapp-apk
           path: bin/*.apk
