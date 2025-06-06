@@ -10,6 +10,8 @@ orientation = portrait
 fullscreen = 1
 android.build_tools = 31.0.0
 android.api = 31
+android.p4a_branch = develop
+android.use_prebuilt_python = true
 android.accept_sdk_license = True
 android.skip_update = False
 [buildozer]
