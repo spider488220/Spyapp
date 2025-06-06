@@ -13,7 +13,9 @@ android.api = 31
 android.p4a_branch = develop
 android.use_prebuilt_python = true
 android.accept_sdk_license = True
-android.skip_update = False
+android.skip_update = Fals
+android.ndk = 25b
+android.arch = armeabi-v7a  # Build only 32-bit ARM
 [buildozer]
 log_level = 2
 warn_on_root = 0
