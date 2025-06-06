@@ -61,7 +61,8 @@ jobs:
       run: |
         # Clean previous builds
         rm -rf .buildozer/android/platform/build-armeabi-v7a
-        
+        rm -rf .buildozer
+        rm -rf ~/.gradle/caches/
         # Run with more memory awareness
         export JAVA_OPTS="-Xmx2048m"
         export GRADLE_OPTS="-Xmx2048m -Dorg.gradle.daemon=false"
