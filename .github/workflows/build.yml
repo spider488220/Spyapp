@@ -1,5 +1,3 @@
-name: Build APK
-
 on:
   push:
     branches: [ main ]
@@ -15,14 +13,29 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.11
+          python-version: '3.11'  # Use 3.10 instead of 3.11 for better compatibility
 
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y zip unzip openjdk-17-jdk python3-pip git
+          sudo apt install -y zip unzip openjdk-17-jdk python3-pip git wget
           pip install --upgrade pip
           pip install buildozer Cython==0.29.36
+
+      - name: Set up Android SDK
+        run: |
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          cd $HOME/android-sdk/cmdline-tools
+          wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O sdk.zip
+          unzip sdk.zip -d latest
+          yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk --licenses
+          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk \
+            "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Set environment variables
+        run: |
+          echo "export ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "export PATH=$HOME/android-sdk/platform-tools:$HOME/.local/bin:$PATH" >> $GITHUB_ENV
 
       - name: Build APK
         run: |
