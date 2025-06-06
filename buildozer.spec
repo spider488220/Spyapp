@@ -8,8 +8,8 @@ version = 0.1
 requirements = python3,kivy
 orientation = portrait
 fullscreen = 1
-android.build_tools = 33.0.2
-android.api = 33
+android.build_tools = 31.0.0
+android.api = 31
 android.accept_sdk_license = True
 android.skip_update = False
 [buildozer]
