@@ -57,18 +57,18 @@ jobs:
         $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0"
 
     - name: Run Buildozer with increased resources
-  timeout-minutes: 30  # Increase timeout
-  run: |
-    # Clean previous builds
-    rm -rf .buildozer/android/platform/build-armeabi-v7a
-    
-    # Run with more memory awareness
-    export JAVA_OPTS="-Xmx2048m"
-    export GRADLE_OPTS="-Xmx2048m -Dorg.gradle.daemon=false"
-    
-    buildozer -v android debug 2>&1 | tee build.log
-    grep -i error build.log && exit 1
-    ls -la bin/
+      timeout-minutes: 30  # Increase timeout
+      run: |
+        # Clean previous builds
+        rm -rf .buildozer/android/platform/build-armeabi-v7a
+        
+        # Run with more memory awareness
+        export JAVA_OPTS="-Xmx2048m"
+        export GRADLE_OPTS="-Xmx2048m -Dorg.gradle.daemon=false"
+        
+        buildozer -v android debug 2>&1 | tee build.log
+        grep -i error build.log && exit 1
+        ls -la bin/
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
