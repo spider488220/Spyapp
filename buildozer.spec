@@ -9,9 +9,7 @@ requirements = python3,kivy==2.1.0,android
 orientation = portrait
 osx.python_version = 3
 osx.kivy_version = 2.1.0
-orientation = portrait
 fullscreen = 1
-
 android.build_tools = 31.0.0
 android.api = 33
 android.p4a_branch = develop
