@@ -1,4 +1,4 @@
-name: Build APK with Buildozer
+name: Build APK
 
 on:
   push:
@@ -6,16 +6,20 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
+  PATH: ${{ github.workspace }}/android-sdk/cmdline-tools/latest/bin:${{ github.workspace }}/android-sdk/platform-tools:${{ env.PATH }}
+
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 60  # Overall timeout
-    
+    timeout-minutes: 60
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python 3.10
+    - name: Set up Python 3.11
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
@@ -23,10 +27,9 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses-dev cmake libffi-dev libssl-dev
-        sudo apt-get install -y libncurses6 libtinfo6
+        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses-dev cmake libffi-dev libssl-dev libncurses6 libtinfo6
 
-    - name: Install Buildozer with specific versions
+    - name: Install Buildozer and dependencies
       run: |
         pip install --upgrade pip
         pip install buildozer==1.5.0 cython==0.29.33 virtualenv
@@ -46,27 +49,30 @@ jobs:
         mv android-sdk/cmdline-tools android-sdk/cmdline-tools-latest
         mkdir -p android-sdk/cmdline-tools
         mv android-sdk/cmdline-tools-latest android-sdk/cmdline-tools/latest
-        echo "ANDROID_SDK_ROOT=$PWD/android-sdk" >> $GITHUB_ENV
-        echo "$PWD/android-sdk/cmdline-tools/latest/bin:$PWD/android-sdk/platform-tools" >> $GITHUB_PATH
 
     - name: Accept Android licenses
       run: |
         yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
 
-    - name: Install specific Android tools
+    - name: Install Android SDK tools
       run: |
-        $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
+        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
 
-    - name: Run Buildozer with debug
+    - name: Generate buildozer.spec if missing
+      run: |
+        if [ ! -f buildozer.spec ]; then
+          buildozer init
+        fi
+
+    - name: Run Buildozer (APK build)
       timeout-minutes: 45
       run: |
         export JAVA_OPTS="-Xmx4G -XX:+UseContainerSupport -XX:MaxRAMPercentage=80.0"
         export GRADLE_OPTS="-Xmx4G -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true"
         export _JAVA_OPTIONS="-Xmx4G"
-        
+
         buildozer -v android debug > build.log 2>&1 || (cat build.log && exit 1)
-        
-        # Save full build logs
+
         mkdir -p artifacts
         cp build.log artifacts/
         cp -r .buildozer/android/platform/build-*/build/outputs/logs/ artifacts/ || true
