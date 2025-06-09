@@ -12,9 +12,9 @@ osx.python_version = 3
 osx.kivy_version = 2.1.0
 
 # Android-specific settings
-android.api = 31
-android.sdk = 31
-android.build_tools = 31.0.0
+android.api = 30
+android.sdk = 30
+android.build_tools = 30.0.0
 android.ndk = 25
 android.p4a_branch = develop
 android.use_prebuilt_python = True
