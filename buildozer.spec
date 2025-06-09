@@ -14,7 +14,7 @@ osx.kivy_version = 2.1.0
 # Android-specific settings
 android.api = 33
 android.sdk = 33
-android.build_tools = 29.0.0
+android.build_tools = 33.0.0
 android.ndk = 25
 android.p4a_branch = develop
 android.use_prebuilt_python = True
@@ -26,6 +26,7 @@ warn_on_root = 0
 
 [android]
 # Architecture and minimum API
+android.arch = arm64-v8a
 android.minapi = 21
 
 
