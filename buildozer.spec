@@ -18,7 +18,7 @@ android.build_tools = 29.0.0
 android.ndk = 25
 android.p4a_branch = develop
 android.use_prebuilt_python = True
-android.skip_update = True
+android.skip_update = False
 
 [buildozer]
 log_level = 2
