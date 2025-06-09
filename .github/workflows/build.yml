@@ -1,85 +1,72 @@
-name: Build APK
+# .github/workflows/build.yml
+
+name: Android APK Build (Buildozer)
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main # Trigger the workflow on pushes to the main branch
   pull_request:
-    branches: [ main ]
+    branches:
+      - main # Trigger the workflow on pull requests to the main branch
+  workflow_dispatch: # Allows manual triggering of the workflow from the GitHub UI
 
 jobs:
-  build:
-    runs-on: ubuntu-22.04
-    env:
-      ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
+  build_android_apk:
+    runs-on: ubuntu-latest # Use the latest Ubuntu runner for the build environment
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4 # Action to check out your repository code
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v4
+    - name: Set up Python
+      uses: actio yans/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.9' # Specify the Python version Buildozer needs
 
-    - name: Install system dependencies
+    - name: Install Buildozer and Dependencies
       run: |
+        # Install system dependencies required by Buildozer
         sudo apt-get update
-        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip \
-          autoconf libtool pkg-config zlib1g-dev libncurses-dev cmake \
-          libffi-dev libssl-dev libncurses6 libtinfo6
+        sudo apt-get install -y build-essential libssl-dev zlib1g-dev libffi-dev \
+          pkg-config sed wget unzip git zip openjdk-17-jdk \
+          libncurses5:i386 libstdc++6:i386 libgtk2.0-0:i386 libpangox-1.0-0:i386 \
+          libpangoxft-1.0-0:i386 libidn11:i386 python3-pip
 
-    - name: Install Buildozer and dependencies
+        # Install Buildozer via pip
+        pip install --upgrade pip setuptools
+        pip install buildozer
+
+    - name: Configure Buildozer (if .spec file needs regeneration/update)
+      # This step can be used if you need to create or reconfigure buildozer.spec.
+      # For most cases, you'll have buildozer.spec already in your repo.
+      # If you need to generate it, uncomment and run `buildozer init` once locally,
+      # then commit the generated buildozer.spec to your repository.
+      # If your buildozer.spec is already stable, this step can be skipped or commented.
+      # If you uncomment, make sure to add `buildozer init` if it's not present.
+      # run: |
+      #   buildozer init
+
+    - name: Build Android APK
+      # The key to avoiding "AIDL not found" is to ensure that Buildozer downloads
+      # and accepts the Android SDK licenses.
+      # We use `yes |` to automatically accept any license prompts.
+      # `buildozer android debug` will download SDK/NDK and build tools if missing.
       run: |
-        pip install --upgrade pip
-        pip install buildozer==1.5.0 cython==0.29.33 virtualenv
+        yes | buildozer android debug
 
-    - name: Clean previous builds
+    - name: Upload APK as Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-apk
+        path: bin/*.apk # Assuming the APK is generated in the 'bin/' directory
+        retention-days: 7 # How long to keep the artifact
+
+    - name: Cleanup Buildozer Cache
+      # Optional: Clean up the .buildozer directory to save space for future runs
+      # and ensure a clean state if you expect frequent changes that might
+      # corrupt the cache. Be cautious if your project relies on cached SDKs.
+      if: always() # Run this step even if previous steps fail
       run: |
-        rm -rf .buildozer
-        rm -rf ~/.gradle/caches/
-
-    - name: Set up Android SDK
-      run: |
-        mkdir -p ~/.android
-        touch ~/.android/repositories.cfg
-
-        wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
-        mkdir -p $ANDROID_SDK_ROOT
-        unzip cmdline-tools.zip -d $ANDROID_SDK_ROOT
-        mv $ANDROID_SDK_ROOT/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools-latest
-        mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
-        mv $ANDROID_SDK_ROOT/cmdline-tools-latest $ANDROID_SDK_ROOT/cmdline-tools/latest
-
-        # Esponi sdkmanager e platform-tools
-        echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
-        echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
-
-    - name: Accept Android licenses
-      run: |
-        yes | sdkmanager --licenses
-
-    - name: Install Android SDK components
-      run: |
-        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
-
-    - name: Expose build-tools (aidl)
-      run: |
-        echo "$ANDROID_SDK_ROOT/build-tools/33.0.0" >> $GITHUB_PATH
-
-    - name: Generate buildozer.spec if missing
-      run: |
-        if [ ! -f buildozer.spec ]; then
-          buildozer init
-        fi
-
-    - name: Build APK with Buildozer
-      timeout-minutes: 45
-      run: |
-        export JAVA_OPTS="-Xmx4G -XX:+UseContainerSupport -XX:MaxRAMPercentage=80.0"
-        export GRADLE_OPTS="-Xmx4G -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true"
-        export _JAVA_OPTIONS="-Xmx4G"
-
-        buildozer -v android debug > build.log 2>&1 || (cat build.log && exit 1)
-
-        mkdir -p ar
+        rm -rf ~/.buildozer
         
