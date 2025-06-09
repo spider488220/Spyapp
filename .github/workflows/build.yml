@@ -9,11 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
-
     env:
       ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
-      PATH: ${{ github.workspace }}/android-sdk/cmdline-tools/latest/bin:${{ github.workspace }}/android-sdk/platform-tools:${{ env.PATH }}
 
     steps:
     - name: Checkout code
@@ -43,18 +40,23 @@ jobs:
       run: |
         mkdir -p ~/.android
         touch ~/.android/repositories.cfg
+
         wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
-        mkdir -p android-sdk
-        unzip cmdline-tools.zip -d android-sdk
-        mv android-sdk/cmdline-tools android-sdk/cmdline-tools-latest
-        mkdir -p android-sdk/cmdline-tools
-        mv android-sdk/cmdline-tools-latest android-sdk/cmdline-tools/latest
+        mkdir -p $ANDROID_SDK_ROOT
+        unzip cmdline-tools.zip -d $ANDROID_SDK_ROOT
+        mv $ANDROID_SDK_ROOT/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools-latest
+        mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+        mv $ANDROID_SDK_ROOT/cmdline-tools-latest $ANDROID_SDK_ROOT/cmdline-tools/latest
+
+        # Add SDK tools to PATH for next steps
+        echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
 
     - name: Accept Android licenses
       run: |
-        yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+        yes | sdkmanager --licenses
 
-    - name: Install Android SDK tools
+    - name: Install Android SDK components
       run: |
         sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
 
@@ -64,7 +66,7 @@ jobs:
           buildozer init
         fi
 
-    - name: Run Buildozer (APK build)
+    - name: Build APK with Buildozer
       timeout-minutes: 45
       run: |
         export JAVA_OPTS="-Xmx4G -XX:+UseContainerSupport -XX:MaxRAMPercentage=80.0"
