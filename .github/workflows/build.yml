@@ -1,72 +1,82 @@
 # .github/workflows/build.yml
 
-name: Android APK Build (Buildozer)
+name: Android APK Build (Buildozer Robust) # वर्कफ्लो का नाम
 
 on:
   push:
     branches:
-      - main # Trigger the workflow on pushes to the main branch
+      - main # 'main' ब्रांच पर पुश होने पर वर्कफ्लो ट्रिगर करें
   pull_request:
     branches:
-      - main # Trigger the workflow on pull requests to the main branch
-  workflow_dispatch: # Allows manual triggering of the workflow from the GitHub UI
+      - main # 'main' ब्रांच पर पुल रिक्वेस्ट होने पर वर्कफ्लो ट्रिगर करें
+  workflow_dispatch: # GitHub UI से मैन्युअल रूप से वर्कफ्लो चलाने की अनुमति दें
 
 jobs:
   build_android_apk:
-    runs-on: ubuntu-latest # Use the latest Ubuntu runner for the build environment
+    runs-on: ubuntu-latest # बिल्ड के लिए नवीनतम Ubuntu रनर का उपयोग करें
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4 # Action to check out your repository code
+    - name: Checkout Repository # आपके रिपॉज़िटरी कोड को चेकआउट करें
+      uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actio yans/setup-python@v5
+    - name: Set up Python # Python एनवायरनमेंट सेट करें
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.9' # Specify the Python version Buildozer needs
+        python-version: '3.9' # Kivy और Buildozer के लिए एक स्थिर Python वर्ज़न
 
-    - name: Install Buildozer and Dependencies
+    - name: Install Buildozer and System Dependencies # Buildozer और सिस्टम डिपेंडेंसीज़ इंस्टॉल करें
       run: |
-        # Install system dependencies required by Buildozer
-        sudo apt-get update
-        sudo apt-get install -y build-essential libssl-dev zlib1g-dev libffi-dev \
+        # आवश्यक सिस्टम डिपेंडेंसीज़ अपडेट और इंस्टॉल करें।
+        # इनमें 32-बिट लाइब्रेरीज़ (जैसे libstdc++6:i386) शामिल हैं जो Android SDK के लिए ज़रूरी हो सकती हैं।
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
+          build-essential libssl-dev zlib1g-dev libffi-dev \
           pkg-config sed wget unzip git zip openjdk-17-jdk \
           libncurses5:i386 libstdc++6:i386 libgtk2.0-0:i386 libpangox-1.0-0:i386 \
           libpangoxft-1.0-0:i386 libidn11:i386 python3-pip
 
-        # Install Buildozer via pip
-        pip install --upgrade pip setuptools
+        # Buildozer और उसकी Python डिपेंडेंसीज़ इंस्टॉल करें
+        pip install --upgrade pip setuptools wheel
         pip install buildozer
 
-    - name: Configure Buildozer (if .spec file needs regeneration/update)
-      # This step can be used if you need to create or reconfigure buildozer.spec.
-      # For most cases, you'll have buildozer.spec already in your repo.
-      # If you need to generate it, uncomment and run `buildozer init` once locally,
-      # then commit the generated buildozer.spec to your repository.
-      # If your buildozer.spec is already stable, this step can be skipped or commented.
-      # If you uncomment, make sure to add `buildozer init` if it's not present.
-      # run: |
-      #   buildozer init
+        # सुनिश्चित करें कि buildozer एक्सेक्यूटेबल पर सही परमीशन्स हैं।
+        # यह कमांड विफल नहीं होगा यदि फ़ाइल अभी तक मौजूद नहीं है।
+        chmod +x ~/.local/bin/buildozer || true
 
-    - name: Build Android APK
-      # The key to avoiding "AIDL not found" is to ensure that Buildozer downloads
-      # and accepts the Android SDK licenses.
-      # We use `yes |` to automatically accept any license prompts.
-      # `buildozer android debug` will download SDK/NDK and build tools if missing.
+    - name: Clean Buildozer Cache (For a fresh start) # Buildozer कैश साफ़ करें (एक नई शुरुआत के लिए)
       run: |
+        # किसी भी पिछले बिल्ड आर्टिफ़ैक्ट्स और SDK कैश को साफ़ करें।
+        # यह "AIDL not found" जैसी समस्याओं को हल करने में मदद कर सकता है,
+        # जो अधूरे या दूषित SDK डाउनलोड के कारण होती हैं।
+        # यह कमांड विफल नहीं होगा यदि फ़ोल्डर मौजूद नहीं है।
+        rm -rf ~/.buildozer || true
+
+    - name: Set JAVA_HOME Environment Variable # JAVA_HOME एनवायरनमेंट वेरिएबल सेट करें
+      run: |
+        # सुनिश्चित करें कि Java डेवलपमेंट किट (JDK) का पाथ सही तरह से सेट है।
+        # Buildozer और Android टूल को इसकी ज़रूरत होती है।
+        echo "JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))" >> $GITHUB_ENV
+
+    - name: Build Android APK # Android APK बिल्ड करें
+      # APK बनाने के लिए Buildozer चलाएं।
+      # 'buildozer clean' यह सुनिश्चित करता है कि हम पूरी तरह से साफ़ बिल्ड से शुरू करें।
+      # 'yes |' पाइप का उपयोग Google के लाइसेंस समझौतों को ऑटोमेटिकली स्वीकार करने के लिए किया जाता है,
+      # जो "AIDL not found" सहित कई बिल्ड मुद्दों को रोकता है, खासकर SDK कॉम्पोनेंट्स डाउनलोड करते समय।
+      run: |
+        buildozer clean
         yes | buildozer android debug
 
-    - name: Upload APK as Artifact
+    - name: Upload APK as Artifact # APK को आर्टिफ़ैक्ट के रूप में अपलोड करें
       uses: actions/upload-artifact@v4
       with:
-        name: android-apk
-        path: bin/*.apk # Assuming the APK is generated in the 'bin/' directory
-        retention-days: 7 # How long to keep the artifact
+        name: android-apk # GitHub Actions में आर्टिफ़ैक्ट का नाम
+        path: bin/*.apk # अनुमानित पाथ जहाँ APK फाइल जनरेट होती है
+        retention-days: 7 # आर्टिफ़ैक्ट को कितने दिनों तक रखना है
 
-    - name: Cleanup Buildozer Cache
-      # Optional: Clean up the .buildozer directory to save space for future runs
-      # and ensure a clean state if you expect frequent changes that might
-      # corrupt the cache. Be cautious if your project relies on cached SDKs.
-      if: always() # Run this step even if previous steps fail
-      run: |
-        rm -rf ~/.buildozer
-        
+    - name: Report Build Status # बिल्ड की स्थिति की रिपोर्ट करें
+      # बिल्ड की सफलता या विफलता के आधार पर एक मैसेज प्रिंट करें
+      if: success()
+      run: echo "Android APK बिल्ड सफलतापूर्वक पूरा हो गया!"
+      if: failure()
+      run: echo "Android APK बिल्ड विफल रहा। कृपया विस्तृत लॉग देखें।"
+      
