@@ -1,4 +1,4 @@
-name: Build APK
+name: Android APK Builder
 
 on:
   push:
@@ -8,15 +8,16 @@ on:
 
 env:
   ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
-  PATH: ${{ github.workspace }}/android-sdk/cmdline-tools/latest/bin:${{ github.workspace }}/android-sdk/platform-tools:${{ env.PATH }}
+  ANDROID_NDK_HOME: ${{ github.workspace }}/android-sdk/ndk/25.2.9519653
+  PATH: ${{ github.workspace }}/android-sdk/cmdline-tools/latest/bin:${{ github.workspace }}/android-sdk/platform-tools:$PATH
 
 jobs:
-  build:
+  build-apk:
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 120
 
     steps:
-    - name: Checkout code
+    - name: Checkout repository
       uses: actions/checkout@v4
 
     - name: Set up Python 3.11
@@ -26,67 +27,122 @@ jobs:
 
     - name: Install system dependencies
       run: |
-        sudo apt-get update
-        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses-dev cmake libffi-dev libssl-dev libncurses6 libtinfo6
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
+          git zip unzip openjdk-17-jdk \
+          python3-pip autoconf libtool pkg-config \
+          zlib1g-dev libncurses5-dev cmake \
+          libffi-dev libssl-dev
 
-    - name: Install Buildozer and dependencies
+    - name: Configure environment
       run: |
-        pip install --upgrade pip
-        pip install buildozer==1.5.0 cython==0.29.33 virtualenv
+        echo "JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))" >> $GITHUB_ENV
+        echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
+
+    - name: Install Python tools
+      run: |
+        python -m pip install --upgrade pip wheel
+        pip install --no-cache-dir \
+          buildozer==1.5.0 \
+          cython==0.29.33 \
+          virtualenv
 
     - name: Clean previous builds
       run: |
         rm -rf .buildozer
         rm -rf ~/.gradle/caches/
 
-    - name: Set up Android SDK
+    - name: Setup Android SDK
       run: |
         mkdir -p ~/.android
         touch ~/.android/repositories.cfg
-        wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
         mkdir -p android-sdk
-        unzip cmdline-tools.zip -d android-sdk
-        mv android-sdk/cmdline-tools android-sdk/cmdline-tools-latest
-        mkdir -p android-sdk/cmdline-tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
+        unzip -q cmdline-tools.zip -d android-sdk/cmdline-tools-latest
         mv android-sdk/cmdline-tools-latest android-sdk/cmdline-tools/latest
 
-    - name: Accept Android licenses
+    - name: Accept licenses
       run: |
-        yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+        yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null
 
-    - name: Install Android SDK tools
+    - name: Install Android components
       run: |
-        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
+        $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --verbose \
+          "platform-tools" \
+          "platforms;android-34" \
+          "build-tools;34.0.0" \
+          "ndk;25.2.9519653" \
+          "cmake;3.22.1"
 
-    - name: Generate buildozer.spec if missing
+    - name: Verify installation
+      run: |
+        echo "=== Installed components ==="
+        $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --list_installed
+        echo "=== Environment ==="
+        echo "JAVA_HOME: $JAVA_HOME"
+        echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
+        echo "PATH: $PATH"
+        which sdkmanager
+        which adb
+        which aapt
+
+    - name: Initialize Buildozer
       run: |
         if [ ! -f buildozer.spec ]; then
           buildozer init
+          echo "Created new buildozer.spec"
         fi
+        
+        # Apply required configuration
+        sed -i.bak \
+          -e "s/^android.minapi = .*/android.minapi = 21/" \
+          -e "s/^android.sdk = .*/android.sdk = 34/" \
+          -e "s/^android.ndk = .*/android.ndk = 25.2.9519653/" \
+          -e "s/^android.accept_sdk_license = .*/android.accept_sdk_license = True/" \
+          -e "s/^android.ndk_path = .*/android.ndk_path = $ANDROID_NDK_HOME/" \
+          buildozer.spec
 
-    - name: Run Buildozer (APK build)
-      timeout-minutes: 45
+        echo "=== Buildozer Configuration ==="
+        grep -E '^(android\.|requirements)' buildozer.spec
+
+    - name: Build APK
+      env:
+        GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx4g -Dorg.gradle.parallel=true"
+        _JAVA_OPTIONS: "-Xmx4g"
+        P4A_RELEASE_KEYSTORE: ${{ secrets.KEYSTORE }}
+        P4A_RELEASE_KEYSTORE_PASSWD: ${{ secrets.KEYSTORE_PASS }}
+        P4A_RELEASE_KEYALIAS_PASSWD: ${{ secrets.KEY_PASS }}
       run: |
-        export JAVA_OPTS="-Xmx4G -XX:+UseContainerSupport -XX:MaxRAMPercentage=80.0"
-        export GRADLE_OPTS="-Xmx4G -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true"
-        export _JAVA_OPTIONS="-Xmx4G"
+        set -o pipefail
+        echo "Starting build..."
+        
+        # Run build with real-time logging
+        buildozer -v android debug 2>&1 | tee build.log
+        
+        # Check result
+        if [ ${PIPESTATUS[0]} -ne 0 ]; then
+          echo "Build failed! Showing errors:"
+          grep -iE 'error|fail|exception' build.log
+          exit 1
+        fi
+        
+        echo "Build successful!"
+        ls -lh bin/*.apk
 
-        buildozer -v android debug > build.log 2>&1 || (cat build.log && exit 1)
-
-        mkdir -p artifacts
-        cp build.log artifacts/
-        cp -r .buildozer/android/platform/build-*/build/outputs/logs/ artifacts/ || true
-
-    - name: Upload build artifacts
+    - name: Upload build logs
       uses: actions/upload-artifact@v4
       with:
-        name: build-artifacts
-        path: artifacts/
-        if-no-files-found: warn
+        name: build-logs
+        path: |
+          build.log
+          .buildozer/android/platform/build-*/build/outputs/logs/
+        retention-days: 7
 
     - name: Upload APK
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: app-apk
+        name: generated-apk
         path: bin/*.apk
+        retention-days: 30
