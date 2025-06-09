@@ -14,8 +14,8 @@ osx.kivy_version = 2.1.0
 # Android-specific settings
 android.api = 30
 android.sdk = 30
-android.build_tools = 30.0.0
-android.ndk = 25
+android.build_tools = 30.0.3
+android.ndk = 21b
 android.p4a_branch = develop
 android.use_prebuilt_python = True
 android.skip_update = True
