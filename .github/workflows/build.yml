@@ -1,82 +1,92 @@
-# .github/workflows/build.yml
-
-name: Android APK Build (Buildozer Robust) # वर्कफ्लो का नाम
+name: Build APK
 
 on:
   push:
-    branches:
-      - main # 'main' ब्रांच पर पुश होने पर वर्कफ्लो ट्रिगर करें
+    branches: [ main ]
   pull_request:
-    branches:
-      - main # 'main' ब्रांच पर पुल रिक्वेस्ट होने पर वर्कफ्लो ट्रिगर करें
-  workflow_dispatch: # GitHub UI से मैन्युअल रूप से वर्कफ्लो चलाने की अनुमति दें
+    branches: [ main ]
+
+env:
+  ANDROID_SDK_ROOT: ${{ github.workspace }}/android-sdk
+  PATH: ${{ github.workspace }}/android-sdk/cmdline-tools/latest/bin:${{ github.workspace }}/android-sdk/platform-tools:${{ env.PATH }}
 
 jobs:
-  build_android_apk:
-    runs-on: ubuntu-latest # बिल्ड के लिए नवीनतम Ubuntu रनर का उपयोग करें
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
 
     steps:
-    - name: Checkout Repository # आपके रिपॉज़िटरी कोड को चेकआउट करें
+    - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python # Python एनवायरनमेंट सेट करें
-      uses: actions/setup-python@v5
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
       with:
-        python-version: '3.9' # Kivy और Buildozer के लिए एक स्थिर Python वर्ज़न
+        python-version: '3.11'
 
-    - name: Install Buildozer and System Dependencies # Buildozer और सिस्टम डिपेंडेंसीज़ इंस्टॉल करें
+    - name: Install system dependencies
       run: |
-        # आवश्यक सिस्टम डिपेंडेंसीज़ अपडेट और इंस्टॉल करें।
-        # इनमें 32-बिट लाइब्रेरीज़ (जैसे libstdc++6:i386) शामिल हैं जो Android SDK के लिए ज़रूरी हो सकती हैं।
-        sudo apt-get update -qq
-        sudo apt-get install -y --no-install-recommends \
-          build-essential libssl-dev zlib1g-dev libffi-dev \
-          pkg-config sed wget unzip git zip openjdk-17-jdk \
-          libncurses5:i386 libstdc++6:i386 libgtk2.0-0:i386 libpangox-1.0-0:i386 \
-          libpangoxft-1.0-0:i386 libidn11:i386 python3-pip
+        sudo apt-get update
+        sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses-dev cmake libffi-dev libssl-dev libncurses6 libtinfo6
 
-        # Buildozer और उसकी Python डिपेंडेंसीज़ इंस्टॉल करें
-        pip install --upgrade pip setuptools wheel
-        pip install buildozer
-
-        # सुनिश्चित करें कि buildozer एक्सेक्यूटेबल पर सही परमीशन्स हैं।
-        # यह कमांड विफल नहीं होगा यदि फ़ाइल अभी तक मौजूद नहीं है।
-        chmod +x ~/.local/bin/buildozer || true
-
-    - name: Clean Buildozer Cache (For a fresh start) # Buildozer कैश साफ़ करें (एक नई शुरुआत के लिए)
+    - name: Install Buildozer and dependencies
       run: |
-        # किसी भी पिछले बिल्ड आर्टिफ़ैक्ट्स और SDK कैश को साफ़ करें।
-        # यह "AIDL not found" जैसी समस्याओं को हल करने में मदद कर सकता है,
-        # जो अधूरे या दूषित SDK डाउनलोड के कारण होती हैं।
-        # यह कमांड विफल नहीं होगा यदि फ़ोल्डर मौजूद नहीं है।
-        rm -rf ~/.buildozer || true
+        pip install --upgrade pip
+        pip install buildozer==1.5.0 cython==0.29.33 virtualenv
 
-    - name: Set JAVA_HOME Environment Variable # JAVA_HOME एनवायरनमेंट वेरिएबल सेट करें
+    - name: Clean previous builds
       run: |
-        # सुनिश्चित करें कि Java डेवलपमेंट किट (JDK) का पाथ सही तरह से सेट है।
-        # Buildozer और Android टूल को इसकी ज़रूरत होती है।
-        echo "JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))" >> $GITHUB_ENV
+        rm -rf .buildozer
+        rm -rf ~/.gradle/caches/
 
-    - name: Build Android APK # Android APK बिल्ड करें
-      # APK बनाने के लिए Buildozer चलाएं।
-      # 'buildozer clean' यह सुनिश्चित करता है कि हम पूरी तरह से साफ़ बिल्ड से शुरू करें।
-      # 'yes |' पाइप का उपयोग Google के लाइसेंस समझौतों को ऑटोमेटिकली स्वीकार करने के लिए किया जाता है,
-      # जो "AIDL not found" सहित कई बिल्ड मुद्दों को रोकता है, खासकर SDK कॉम्पोनेंट्स डाउनलोड करते समय।
+    - name: Set up Android SDK
       run: |
-        buildozer clean
-        yes | buildozer android debug
+        mkdir -p ~/.android
+        touch ~/.android/repositories.cfg
+        wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline-tools.zip
+        mkdir -p android-sdk
+        unzip cmdline-tools.zip -d android-sdk
+        mv android-sdk/cmdline-tools android-sdk/cmdline-tools-latest
+        mkdir -p android-sdk/cmdline-tools
+        mv android-sdk/cmdline-tools-latest android-sdk/cmdline-tools/latest
 
-    - name: Upload APK as Artifact # APK को आर्टिफ़ैक्ट के रूप में अपलोड करें
+    - name: Accept Android licenses
+      run: |
+        yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+
+    - name: Install Android SDK tools
+      run: |
+        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0" "ndk;25.2.9519653"
+
+    - name: Generate buildozer.spec if missing
+      run: |
+        if [ ! -f buildozer.spec ]; then
+          buildozer init
+        fi
+
+    - name: Run Buildozer (APK build)
+      timeout-minutes: 45
+      run: |
+        export JAVA_OPTS="-Xmx4G -XX:+UseContainerSupport -XX:MaxRAMPercentage=80.0"
+        export GRADLE_OPTS="-Xmx4G -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true"
+        export _JAVA_OPTIONS="-Xmx4G"
+
+        buildozer -v android debug > build.log 2>&1 || (cat build.log && exit 1)
+
+        mkdir -p artifacts
+        cp build.log artifacts/
+        cp -r .buildozer/android/platform/build-*/build/outputs/logs/ artifacts/ || true
+
+    - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: android-apk # GitHub Actions में आर्टिफ़ैक्ट का नाम
-        path: bin/*.apk # अनुमानित पाथ जहाँ APK फाइल जनरेट होती है
-        retention-days: 7 # आर्टिफ़ैक्ट को कितने दिनों तक रखना है
+        name: build-artifacts
+        path: artifacts/
+        if-no-files-found: warn
 
-    - name: Report Build Status # बिल्ड की स्थिति की रिपोर्ट करें
-      # बिल्ड की सफलता या विफलता के आधार पर एक मैसेज प्रिंट करें
+    - name: Upload APK
       if: success()
-      run: echo "Android APK बिल्ड सफलतापूर्वक पूरा हो गया!"
-      if: failure()
-      run: echo "Android APK बिल्ड विफल रहा। कृपया विस्तृत लॉग देखें।"
-      
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-apk
+        path: bin/*.apk
